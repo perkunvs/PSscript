@@ -1,0 +1,45 @@
+# Import the Active Directory module
+Import-Module ActiveDirectory
+
+# Function to generate a random 16-character password
+function Generate-RandomPassword {
+    $length = 16
+    $characters = @('A'..'Z') + @('a'..'z') + @('0'..'9') + @('!', '@', '#', '$', '%', '&', '*', '?')
+    $password = -join ((1..$length) | ForEach-Object { $characters | Get-Random })
+    return $password
+}
+
+# Set the output file path
+$outputFile = "C:\path\to\passwords_changed.txt"
+
+# Create or clear the file before appending new data
+Clear-Content -Path $outputFile -ErrorAction SilentlyContinue
+
+# Get all AD users
+$users = Get-ADUser -Filter * -Properties SamAccountName
+
+foreach ($user in $users) {
+    # Generate a new password
+    $newPassword = Generate-RandomPassword
+
+    try {
+        # Change the password for the user
+        Set-ADAccountPassword -Identity $user.SamAccountName -NewPassword (ConvertTo-SecureString -AsPlainText $newPassword -Force) -Reset
+        
+        # Prepare the output data (user and password)
+        $outputLine = "User: $($user.SamAccountName), Password: $newPassword"
+
+        # Write the output to the file
+        Add-Content -Path $outputFile -Value $outputLine
+
+        # Output to console for confirmation
+        Write-Host "Password for user $($user.SamAccountName) changed to: $newPassword"
+    } catch {
+        Write-Error "Failed to change password for $($user.SamAccountName): $_"
+    }
+}
+
+# Open the output file in Notepad
+Start-Process notepad.exe $outputFile
+
+Write-Host "Password change process completed. Opened the output file in Notepad."
