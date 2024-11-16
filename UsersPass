@@ -4,42 +4,73 @@ Import-Module ActiveDirectory
 # Function to generate a random 16-character password
 function Generate-RandomPassword {
     $length = 16
-    $characters = @('A'..'Z') + @('a'..'z') + @('0'..'9') + @('!', '@', '#', '$', '%', '&', '*', '?')
-    $password = -join ((1..$length) | ForEach-Object { $characters | Get-Random })
+    $characters = @()  # Initialize as an empty array
+
+    # Manually define the ranges for uppercase letters, lowercase letters, digits, and special characters
+    $characters += @('A'..'Z')   # Uppercase letters
+    $characters += @('a'..'z')   # Lowercase letters
+    $characters += @('0'..'9')   # Digits
+    $characters += @('!', '@', '#', '$', '%', '&', '*', '?')  # Special characters
+
+    # Initialize the password variable
+    $password = ""
+
+    # Loop to generate a random password of the specified length
+    for ($i = 0; $i -lt $length; $i++) {
+        $password += $characters | Get-Random
+    }
+
     return $password
 }
 
 # Set the output file path
 $outputFile = "C:\path\to\passwords_changed.txt"
 
-# Create or clear the file before appending new data
-Clear-Content -Path $outputFile -ErrorAction SilentlyContinue
+# Ensure the directory exists
+$outputDirectory = [System.IO.Path]::GetDirectoryName($outputFile)
+if (-not (Test-Path -Path $outputDirectory)) {
+    New-Item -ItemType Directory -Path $outputDirectory -Force
+}
+
+# Clear the file if it exists, otherwise create it
+if (Test-Path -Path $outputFile) {
+    Clear-Content -Path $outputFile
+}
 
 # Get all AD users
 $users = Get-ADUser -Filter * -Properties SamAccountName
 
 foreach ($user in $users) {
-    # Generate a new password
-    $newPassword = Generate-RandomPassword
+    # Validate the SamAccountName is not null or empty
+    if (![string]::IsNullOrWhiteSpace($user.SamAccountName)) {
+        # Generate a new password
+        $newPassword = Generate-RandomPassword
 
-    try {
-        # Change the password for the user
-        Set-ADAccountPassword -Identity $user.SamAccountName -NewPassword (ConvertTo-SecureString -AsPlainText $newPassword -Force) -Reset
-        
-        # Prepare the output data (user and password)
-        $outputLine = "User: $($user.SamAccountName), Password: $newPassword"
+        try {
+            # Change the password for the user
+            Set-ADAccountPassword -Identity $user.SamAccountName -NewPassword (ConvertTo-SecureString -AsPlainText $newPassword -Force) -Reset
+            
+            # Prepare the output data (user and password)
+            $outputLine = "User: $($user.SamAccountName), Password: $newPassword"
 
-        # Write the output to the file
-        Add-Content -Path $outputFile -Value $outputLine
+            # Write the output to the file
+            Add-Content -Path $outputFile -Value $outputLine
 
-        # Output to console for confirmation
-        Write-Host "Password for user $($user.SamAccountName) changed to: $newPassword"
-    } catch {
-        Write-Error "Failed to change password for $($user.SamAccountName): $_"
+            # Output to console for confirmation
+            Write-Host "Password for user $($user.SamAccountName) changed to: $newPassword"
+        } catch {
+            Write-Error "Failed to change password for $($user.SamAccountName): $_"
+        }
+    } else {
+        Write-Error "Invalid or missing SamAccountName for user: $($user.Name)"
     }
 }
 
 # Open the output file in Notepad
-Start-Process notepad.exe $outputFile
+if (Test-Path $outputFile) {
+    Start-Process notepad.exe $outputFile
+} else {
+    Write-Warning "Output file not created. No changes were logged."
+}
 
-Write-Host "Password change process completed. Opened the output file in Notepad."
+Write-Host "Password change process completed."
